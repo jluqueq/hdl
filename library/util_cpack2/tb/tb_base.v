@@ -44,6 +44,16 @@
   begin
     $dumpfile (VCD_FILE);
     $dumpvars;
+`ifdef TIMEOUT
+    #`TIMEOUT
+`else
+    #100000
+`endif
+    if (failed == 1'b0)
+      $display("SUCCESS");
+    else
+      $display("FAILED");
+    $finish;
   end
 
   always @(*) #10 clk <= ~clk;

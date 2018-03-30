@@ -33,9 +33,9 @@
 // ***************************************************************************
 // ***************************************************************************
 
-module upack_tb;
+module cpack_tb;
   parameter VCD_FILE = {`__FILE__,"cd"};
-  parameter NUM_OF_CHANNELS = 8;
+  parameter NUM_OF_CHANNELS = 4;
   parameter SAMPLES_PER_CHANNEL = 2;
 
   `define TIMEOUT 1500000
@@ -43,14 +43,12 @@ module upack_tb;
 
   localparam NUM_OF_PORTS = SAMPLES_PER_CHANNEL * NUM_OF_CHANNELS;
 
-  reg fifo_rd_en = 1'b1;
-  wire [NUM_OF_PORTS*8-1:0] fifo_rd_data;
-  reg [NUM_OF_PORTS*8-1:0] expected_fifo_rd_data = 'h00;
-  wire fifo_rd_valid;
+  reg fifo_wr_en = 1'b1;
+  reg [NUM_OF_PORTS*8-1:0] fifo_wr_data = 'h00;
 
-  reg s_axis_valid = 1'b1;
-  wire s_axis_ready;
-  reg [NUM_OF_PORTS*8-1:0] s_axis_data = 'h00;
+  wire packed_fifo_wr_en;
+  wire [NUM_OF_PORTS*8-1:0] packed_fifo_wr_data;
+  reg [NUM_OF_PORTS*8-1:0] expected_packed_fifo_wr_data;
 
   reg [NUM_OF_CHANNELS-1:0] enable = 'h1;
   reg [NUM_OF_CHANNELS-1:0] next_enable = 'h1;
@@ -66,11 +64,22 @@ module upack_tb;
       if (enable != {NUM_OF_CHANNELS{1'b1}}) begin
         enable <= enable + 1'b1;
       end else begin
-        if (failed == 1'b0)
-          $display("SUCCESS");
-        else
-          $display("FAILED");
         $finish;
+      end
+    end
+  end
+
+  reg reset_data = 1'b0;
+  integer reset_counter = 'h00;
+
+  always @(posedge clk) begin
+    if (reset == 1'b1) begin
+      reset_data <= 1'b1;
+      reset_counter <= 'h00;
+    end else begin
+      reset_counter <= reset_counter + 1'b1;
+      if (reset_counter == 'h5) begin
+        reset_data <= 1'b0;
       end
     end
   end
@@ -78,22 +87,17 @@ module upack_tb;
   always @(posedge clk) begin
     if (reset == 1'b1) begin
       counter <= 'h00;
-    end else if (s_axis_ready == 1'b1 && s_axis_valid == 1'b1) begin
+    end else if (packed_fifo_wr_en == 1'b1) begin
       counter <= counter + 1;
     end
   end
 
-  integer i;
-
   always @(posedge clk) begin
-    for (i = 0; i < NUM_OF_PORTS; i = i + 1) begin
-      if (reset == 1'b0 && fifo_rd_valid == 1'b1 && enable[i/SAMPLES_PER_CHANNEL] == 1'b1 &&
-        fifo_rd_data[i*8+:8] !== expected_fifo_rd_data[i*8+:8]) begin
-          failed <= 1'b1;
-          $display("Failed for enable mask: %x. Expected data %x, got %x",
-            enable, expected_fifo_rd_data, fifo_rd_data);
-          i = NUM_OF_PORTS;
-      end
+    if (reset == 1'b0 && packed_fifo_wr_en == 1'b1 &&
+        expected_packed_fifo_wr_data !== packed_fifo_wr_data) begin
+        failed <= 1'b1;
+        $display("Failed for enable mask: %x. Expected data %x, got %x",
+          enable, expected_packed_fifo_wr_data, packed_fifo_wr_data);
     end
   end
 
@@ -106,61 +110,63 @@ module upack_tb;
       for (h = 0; h < SAMPLES_PER_CHANNEL; h = h + 1) begin
         for (i = 0; i < NUM_OF_CHANNELS; i = i + 1) begin
           if (enable[i] == 1'b1) begin
-            expected_fifo_rd_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= j;
+            fifo_wr_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= j;
             j = j + 1;
           end else begin
-            expected_fifo_rd_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= 'hxx;
+            fifo_wr_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= 'hxx;
           end
         end
       end
-    end else if (fifo_rd_valid == 1'b1) begin
+    end else if (fifo_wr_en == 1'b1) begin
       for (h = 0; h < SAMPLES_PER_CHANNEL; h = h + 1) begin
         for (i = 0; i < NUM_OF_CHANNELS; i = i + 1) begin
           if (enable[i] == 1'b1) begin
-            expected_fifo_rd_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= j;
+            fifo_wr_data[(i*SAMPLES_PER_CHANNEL+h)*8+:8] <= j;
             j = j + 1;
           end
         end
       end
     end
   end
+
+  integer i;
 
   always @(posedge clk) begin
     if (reset == 1'b1) begin
       for (i = 0; i < NUM_OF_PORTS; i = i + 1) begin
-        s_axis_data[i*8+:8] <= i;
+        expected_packed_fifo_wr_data[i*8+:8] <= i;
       end
-    end else if (s_axis_ready == 1'b1 && s_axis_valid == 1'b1) begin
+    end else if (packed_fifo_wr_en == 1'b1) begin
       for (i = 0; i < NUM_OF_PORTS; i = i + 1) begin
-        s_axis_data[i*8+:8] <= s_axis_data[i*8+:8] + NUM_OF_PORTS;
+        expected_packed_fifo_wr_data[i*8+:8] <= expected_packed_fifo_wr_data[i*8+:8] + NUM_OF_PORTS;
       end
     end
   end
 
   always @(posedge clk) begin
-    fifo_rd_en <= 1'b1; //$random & 1;
-    if (s_axis_valid == 1'b0 || s_axis_ready == 1'b1) begin
-      s_axis_valid <= 1'b1;//$random % 20;
+    if (reset_data == 1'b1) begin
+      fifo_wr_en <= 1'b0;
+    end else begin
+      fifo_wr_en <= ~fifo_wr_en;// 1'b1; // $random & 1;
     end
   end
 
-  util_upack2_impl #(
+  util_cpack2_impl #(
     .NUM_OF_CHANNELS(NUM_OF_CHANNELS),
     .SAMPLES_PER_CHANNEL(SAMPLES_PER_CHANNEL),
     .SAMPLE_DATA_WIDTH(8)
-  ) i_unpack (
+  ) i_cpack (
     .clk(clk),
     .reset(reset),
 
     .enable(enable),
 
-    .fifo_rd_en({NUM_OF_CHANNELS{fifo_rd_en}}),
-    .fifo_rd_data(fifo_rd_data),
-    .fifo_rd_valid(fifo_rd_valid),
+    .fifo_wr_en({NUM_OF_CHANNELS{fifo_wr_en}}),
+    .fifo_wr_data(fifo_wr_data),//128'h0f0e0d0c0b0a09080706050403020100),
 
-    .s_axis_valid(s_axis_valid),
-    .s_axis_ready(s_axis_ready),
-    .s_axis_data(s_axis_valid ? s_axis_data : {NUM_OF_PORTS{8'hx}})
+    .packed_fifo_wr_en(packed_fifo_wr_en),
+    .packed_fifo_wr_data(packed_fifo_wr_data),
+    .packed_fifo_wr_overflow(1'b0)
   );
 
 endmodule
