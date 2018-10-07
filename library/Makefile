@@ -100,12 +100,12 @@ clean:
 	$(MAKE) -C util_gmii_to_rgmii clean
 	$(MAKE) -C util_i2c_mixer clean
 	$(MAKE) -C util_mfifo clean
+	$(MAKE) -C util_pack/util_upack2 clean
 	$(MAKE) -C util_pulse_gen clean
 	$(MAKE) -C util_rfifo clean
 	$(MAKE) -C util_sigma_delta_spi clean
 	$(MAKE) -C util_tdd_sync clean
 	$(MAKE) -C util_upack clean
-	$(MAKE) -C util_upack2 clean
 	$(MAKE) -C util_var_fifo clean
 	$(MAKE) -C util_wfifo clean
 	$(MAKE) -C xilinx/axi_adcfifo clean
@@ -209,12 +209,12 @@ lib:
 	$(MAKE) -C util_gmii_to_rgmii
 	$(MAKE) -C util_i2c_mixer
 	$(MAKE) -C util_mfifo
+	$(MAKE) -C util_pack/util_upack2
 	$(MAKE) -C util_pulse_gen
 	$(MAKE) -C util_rfifo
 	$(MAKE) -C util_sigma_delta_spi
 	$(MAKE) -C util_tdd_sync
 	$(MAKE) -C util_upack
-	$(MAKE) -C util_upack2
 	$(MAKE) -C util_var_fifo
 	$(MAKE) -C util_wfifo
 	$(MAKE) -C xilinx/axi_adcfifo
